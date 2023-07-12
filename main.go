@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
@@ -12,6 +13,12 @@ import (
 	"os"
 	"strconv"
 )
+
+//go:embed web/build
+var buildFS embed.FS
+
+//go:embed web/build/index.html
+var indexPage []byte
 
 func main() {
 	common.SetupGinLog()
@@ -77,7 +84,7 @@ func main() {
 	store := cookie.NewStore([]byte(common.SessionSecret))
 	server.Use(sessions.Sessions("session", store))
 
-	router.SetRouter(server)
+	router.SetRouter(server, buildFS, indexPage)
 	var port = os.Getenv("PORT")
 	if port == "" {
 		port = strconv.Itoa(*common.Port)
