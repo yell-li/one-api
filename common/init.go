@@ -3,6 +3,7 @@ package common
 import (
 	"flag"
 	"fmt"
+	"github.com/joho/godotenv"
 	"log"
 	"os"
 	"path/filepath"
@@ -24,6 +25,10 @@ func printHelp() {
 
 func init() {
 	flag.Parse()
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("无法加载.env文件：", err)
+	}
 
 	if *PrintVersion {
 		fmt.Println(Version)
@@ -41,6 +46,10 @@ func init() {
 	if os.Getenv("SQLITE_PATH") != "" {
 		SQLitePath = os.Getenv("SQLITE_PATH")
 	}
+	if os.Getenv("LOG_DIR") != "" {
+		*LogDir = os.Getenv("LOG_DIR")
+	}
+
 	if *LogDir != "" {
 		var err error
 		*LogDir, err = filepath.Abs(*LogDir)
