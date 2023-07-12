@@ -5,3 +5,10 @@ upload
 *.db
 build
 *.db-journal
+/go.sum
+/test.go
+/vendor
+/bin
+/.env
+/logs
+/cache
