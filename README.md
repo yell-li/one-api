@@ -258,15 +258,6 @@ docker run --name chatgpt-web -d -p 3002:3002 -e OPENAI_API_BASE_URL=https://ope
 
 注意，具体的 API Base 的格式取决于你所使用的客户端。
 
-```mermaid
-graph LR
-    A(用户)
-    A --->|请求| B(One API)
-    B -->|中继请求| C(OpenAI)
-    B -->|中继请求| D(Azure)
-    B -->|中继请求| E(其他下游渠道)
-```
-
 可以通过在令牌后面添加渠道 ID 的方式指定使用哪一个渠道处理本次请求，例如：`Authorization: Bearer ONE_API_KEY-CHANNEL_ID`。
 注意，需要是管理员用户创建的令牌才能指定渠道 ID。
 
