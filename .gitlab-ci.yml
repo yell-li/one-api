@@ -11,7 +11,7 @@ build_docker_image:
   only:
     refs:
       - tags
-      - /master.*$/
+      - /dev.*$/
   tags:
     - dev-runner-3.99
   script:
