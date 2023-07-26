@@ -1,7 +1,19 @@
-build_images:
+stages:
+  - build
+variables:
+  PROJECT_NAME: $CI_PROJECT_NAME
+  IMAGE_TAG: $CI_COMMIT_REF_NAME
+  GIT_SUBMODULE_STRATEGY: normal
+  DEFAULT_DEPLOY_ENV: ""
+
+build_docker_image:
+  stage: build
   only:
-    - master
+    refs:
+      - tags
+      - /master.*$/
   tags:
     - dev-runner-3.99
   script:
-    - build-docker-image-docker
+    - build-docker-image-docker PROJECT_NAME
+
