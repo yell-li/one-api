@@ -15,7 +15,9 @@ ENV GO111MODULE=on \
 WORKDIR /build
 COPY . .
 COPY --from=builder /build/build ./web/build
-RUN go mod download
+RUN go env -w GOPROXY=https://goproxy.cn,direct \
+    && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on \
+   && go mod download
 RUN go build -ldflags "-s -w -X 'one-api/common.Version=$(cat VERSION)' -extldflags '-static'" -o one-api
 
 FROM alpine
@@ -26,6 +28,7 @@ RUN apk update \
     && update-ca-certificates 2>/dev/null || true
 
 COPY --from=builder2 /build/one-api /
+COPY ./.env /
 EXPOSE 3000
-WORKDIR /data
+WORKDIR /
 ENTRYPOINT ["/one-api"]
