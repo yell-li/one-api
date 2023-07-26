@@ -1,18 +1,32 @@
 package controller
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
 	"one-api/common"
 	"one-api/model"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
+
+const (
+	APITypeOpenAI = iota
+	APITypeClaude
+	APITypePaLM
+	APITypeBaidu
+	APITypeZhipu
+)
+
+var httpClient *http.Client
+
+func init() {
+	httpClient = &http.Client{}
+}
 
 func relayTextHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
 	channelType := c.GetInt("channel")
@@ -29,6 +43,9 @@ func relayTextHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
 	}
 	if relayMode == RelayModeModerations && textRequest.Model == "" {
 		textRequest.Model = "text-moderation-latest"
+	}
+	if relayMode == RelayModeEmbeddings && textRequest.Model == "" {
+		textRequest.Model = c.Param("model")
 	}
 	// request validation
 	if textRequest.Model == "" {
@@ -67,33 +84,75 @@ func relayTextHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
 			isModelMapped = true
 		}
 	}
+	apiType := APITypeOpenAI
+	switch channelType {
+	case common.ChannelTypeAnthropic:
+		apiType = APITypeClaude
+	case common.ChannelTypeBaidu:
+		apiType = APITypeBaidu
+	case common.ChannelTypePaLM:
+		apiType = APITypePaLM
+	case common.ChannelTypeZhipu:
+		apiType = APITypeZhipu
+	}
 	baseURL := common.ChannelBaseURLs[channelType]
 	requestURL := c.Request.URL.String()
 	if c.GetString("base_url") != "" {
 		baseURL = c.GetString("base_url")
 	}
 	fullRequestURL := fmt.Sprintf("%s%s", baseURL, requestURL)
-	if channelType == common.ChannelTypeAzure {
-		// https://learn.microsoft.com/en-us/azure/cognitive-services/openai/chatgpt-quickstart?pivots=rest-api&tabs=command-line#rest-api
-		query := c.Request.URL.Query()
-		apiVersion := query.Get("api-version")
-		if apiVersion == "" {
-			apiVersion = c.GetString("api_version")
+	switch apiType {
+	case APITypeOpenAI:
+		if channelType == common.ChannelTypeAzure {
+			// https://learn.microsoft.com/en-us/azure/cognitive-services/openai/chatgpt-quickstart?pivots=rest-api&tabs=command-line#rest-api
+			query := c.Request.URL.Query()
+			apiVersion := query.Get("api-version")
+			if apiVersion == "" {
+				apiVersion = c.GetString("api_version")
+			}
+			requestURL := strings.Split(requestURL, "?")[0]
+			requestURL = fmt.Sprintf("%s?api-version=%s", requestURL, apiVersion)
+			baseURL = c.GetString("base_url")
+			task := strings.TrimPrefix(requestURL, "/v1/")
+			model_ := textRequest.Model
+			model_ = strings.Replace(model_, ".", "", -1)
+			// https://github.com/songquanpeng/one-api/issues/67
+			model_ = strings.TrimSuffix(model_, "-0301")
+			model_ = strings.TrimSuffix(model_, "-0314")
+			model_ = strings.TrimSuffix(model_, "-0613")
+			fullRequestURL = fmt.Sprintf("%s/openai/deployments/%s/%s", baseURL, model_, task)
 		}
-		requestURL := strings.Split(requestURL, "?")[0]
-		requestURL = fmt.Sprintf("%s?api-version=%s", requestURL, apiVersion)
-		baseURL = c.GetString("base_url")
-		task := strings.TrimPrefix(requestURL, "/v1/")
-		model_ := textRequest.Model
-		model_ = strings.Replace(model_, ".", "", -1)
-		// https://github.com/songquanpeng/one-api/issues/67
-		model_ = strings.TrimSuffix(model_, "-0301")
-		model_ = strings.TrimSuffix(model_, "-0314")
-		model_ = strings.TrimSuffix(model_, "-0613")
-		fullRequestURL = fmt.Sprintf("%s/openai/deployments/%s/%s", baseURL, model_, task)
-	} else if channelType == common.ChannelTypePaLM {
-		err := relayPaLM(textRequest, c)
-		return err
+	case APITypeClaude:
+		fullRequestURL = "https://api.anthropic.com/v1/complete"
+		if baseURL != "" {
+			fullRequestURL = fmt.Sprintf("%s/v1/complete", baseURL)
+		}
+	case APITypeBaidu:
+		switch textRequest.Model {
+		case "ERNIE-Bot":
+			fullRequestURL = "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions"
+		case "ERNIE-Bot-turbo":
+			fullRequestURL = "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/eb-instant"
+		case "BLOOMZ-7B":
+			fullRequestURL = "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/bloomz_7b1"
+		}
+		apiKey := c.Request.Header.Get("Authorization")
+		apiKey = strings.TrimPrefix(apiKey, "Bearer ")
+		fullRequestURL += "?access_token=" + apiKey // TODO: access token expire in 30 days
+	case APITypePaLM:
+		fullRequestURL = "https://generativelanguage.googleapis.com/v1beta2/models/chat-bison-001:generateMessage"
+		if baseURL != "" {
+			fullRequestURL = fmt.Sprintf("%s/v1beta2/models/chat-bison-001:generateMessage", baseURL)
+		}
+		apiKey := c.Request.Header.Get("Authorization")
+		apiKey = strings.TrimPrefix(apiKey, "Bearer ")
+		fullRequestURL += "?key=" + apiKey
+	case APITypeZhipu:
+		method := "invoke"
+		if textRequest.Stream {
+			method = "sse-invoke"
+		}
+		fullRequestURL = fmt.Sprintf("https://open.bigmodel.cn/api/paas/v3/model-api/%s/%s", textRequest.Model, method)
 	}
 	var promptTokens int
 	var completionTokens int
@@ -138,22 +197,64 @@ func relayTextHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
 	} else {
 		requestBody = c.Request.Body
 	}
+	switch apiType {
+	case APITypeClaude:
+		claudeRequest := requestOpenAI2Claude(textRequest)
+		jsonStr, err := json.Marshal(claudeRequest)
+		if err != nil {
+			return errorWrapper(err, "marshal_text_request_failed", http.StatusInternalServerError)
+		}
+		requestBody = bytes.NewBuffer(jsonStr)
+	case APITypeBaidu:
+		baiduRequest := requestOpenAI2Baidu(textRequest)
+		jsonStr, err := json.Marshal(baiduRequest)
+		if err != nil {
+			return errorWrapper(err, "marshal_text_request_failed", http.StatusInternalServerError)
+		}
+		requestBody = bytes.NewBuffer(jsonStr)
+	case APITypePaLM:
+		palmRequest := requestOpenAI2PaLM(textRequest)
+		jsonStr, err := json.Marshal(palmRequest)
+		if err != nil {
+			return errorWrapper(err, "marshal_text_request_failed", http.StatusInternalServerError)
+		}
+		requestBody = bytes.NewBuffer(jsonStr)
+	case APITypeZhipu:
+		zhipuRequest := requestOpenAI2Zhipu(textRequest)
+		jsonStr, err := json.Marshal(zhipuRequest)
+		if err != nil {
+			return errorWrapper(err, "marshal_text_request_failed", http.StatusInternalServerError)
+		}
+		requestBody = bytes.NewBuffer(jsonStr)
+	}
 	req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
 		return errorWrapper(err, "new_request_failed", http.StatusInternalServerError)
 	}
-	if channelType == common.ChannelTypeAzure {
-		key := c.Request.Header.Get("Authorization")
-		key = strings.TrimPrefix(key, "Bearer ")
-		req.Header.Set("api-key", key)
-	} else {
-		req.Header.Set("Authorization", c.Request.Header.Get("Authorization"))
+	apiKey := c.Request.Header.Get("Authorization")
+	apiKey = strings.TrimPrefix(apiKey, "Bearer ")
+	switch apiType {
+	case APITypeOpenAI:
+		if channelType == common.ChannelTypeAzure {
+			req.Header.Set("api-key", apiKey)
+		} else {
+			req.Header.Set("Authorization", c.Request.Header.Get("Authorization"))
+		}
+	case APITypeClaude:
+		req.Header.Set("x-api-key", apiKey)
+		anthropicVersion := c.Request.Header.Get("anthropic-version")
+		if anthropicVersion == "" {
+			anthropicVersion = "2023-06-01"
+		}
+		req.Header.Set("anthropic-version", anthropicVersion)
+	case APITypeZhipu:
+		token := getZhipuToken(apiKey)
+		req.Header.Set("Authorization", token)
 	}
 	req.Header.Set("Content-Type", c.Request.Header.Get("Content-Type"))
 	req.Header.Set("Accept", c.Request.Header.Get("Accept"))
 	//req.Header.Set("Connection", c.Request.Header.Get("Connection"))
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return errorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
@@ -179,11 +280,15 @@ func relayTextHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
 			if strings.HasPrefix(textRequest.Model, "gpt-4") {
 				completionRatio = 2
 			}
-			if isStream {
+			if isStream && apiType != APITypeBaidu && apiType != APITypeZhipu {
 				completionTokens = countTokenText(streamResponseText, textRequest.Model)
 			} else {
 				promptTokens = textResponse.Usage.PromptTokens
 				completionTokens = textResponse.Usage.CompletionTokens
+				if apiType == APITypeZhipu {
+					// zhipu's API does not return prompt tokens & completion tokens
+					promptTokens = textResponse.Usage.TotalTokens
+				}
 			}
 			quota = promptTokens + int(float64(completionTokens)*completionRatio)
 			quota = int(float64(quota) * ratio)
@@ -215,123 +320,102 @@ func relayTextHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
 			}
 		}
 	}()
-
-	if isStream {
-		scanner := bufio.NewScanner(resp.Body)
-		scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
-			if atEOF && len(data) == 0 {
-				return 0, nil, nil
-			}
-
-			if i := strings.Index(string(data), "\n\n"); i >= 0 {
-				return i + 2, data[0:i], nil
-			}
-
-			if atEOF {
-				return len(data), data, nil
-			}
-
-			return 0, nil, nil
-		})
-		dataChan := make(chan string)
-		stopChan := make(chan bool)
-		go func() {
-			for scanner.Scan() {
-				data := scanner.Text()
-				if len(data) < 6 { // must be something wrong!
-					common.SysError("invalid stream response: " + data)
-					continue
-				}
-				dataChan <- data
-				data = data[6:]
-				if !strings.HasPrefix(data, "[DONE]") {
-					switch relayMode {
-					case RelayModeChatCompletions:
-						var streamResponse ChatCompletionsStreamResponse
-						err = json.Unmarshal([]byte(data), &streamResponse)
-						if err != nil {
-							common.SysError("error unmarshalling stream response: " + err.Error())
-							return
-						}
-						for _, choice := range streamResponse.Choices {
-							streamResponseText += choice.Delta.Content
-						}
-					case RelayModeCompletions:
-						var streamResponse CompletionsStreamResponse
-						err = json.Unmarshal([]byte(data), &streamResponse)
-						if err != nil {
-							common.SysError("error unmarshalling stream response: " + err.Error())
-							return
-						}
-						for _, choice := range streamResponse.Choices {
-							streamResponseText += choice.Text
-						}
-					}
-				}
-			}
-			stopChan <- true
-		}()
-		c.Writer.Header().Set("Content-Type", "text/event-stream")
-		c.Writer.Header().Set("Cache-Control", "no-cache")
-		c.Writer.Header().Set("Connection", "keep-alive")
-		c.Writer.Header().Set("Transfer-Encoding", "chunked")
-		c.Writer.Header().Set("X-Accel-Buffering", "no")
-		c.Stream(func(w io.Writer) bool {
-			select {
-			case data := <-dataChan:
-				if strings.HasPrefix(data, "data: [DONE]") {
-					data = data[:12]
-				}
-				c.Render(-1, common.CustomEvent{Data: data})
-				return true
-			case <-stopChan:
-				return false
-			}
-		})
-		err = resp.Body.Close()
-		if err != nil {
-			return errorWrapper(err, "close_response_body_failed", http.StatusInternalServerError)
-		}
-		return nil
-	} else {
-		if consumeQuota {
-			responseBody, err := io.ReadAll(resp.Body)
+	switch apiType {
+	case APITypeOpenAI:
+		if isStream {
+			err, responseText := openaiStreamHandler(c, resp, relayMode)
 			if err != nil {
-				return errorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
+				return err
 			}
-			err = resp.Body.Close()
+			streamResponseText = responseText
+			return nil
+		} else {
+			err, usage := openaiHandler(c, resp, consumeQuota)
 			if err != nil {
-				return errorWrapper(err, "close_response_body_failed", http.StatusInternalServerError)
+				return err
 			}
-			err = json.Unmarshal(responseBody, &textResponse)
+			if usage != nil {
+				textResponse.Usage = *usage
+			}
+			return nil
+		}
+	case APITypeClaude:
+		if isStream {
+			err, responseText := claudeStreamHandler(c, resp)
 			if err != nil {
-				return errorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError)
+				return err
 			}
-			if textResponse.Error.Type != "" {
-				return &OpenAIErrorWithStatusCode{
-					OpenAIError: textResponse.Error,
-					StatusCode:  resp.StatusCode,
-				}
+			streamResponseText = responseText
+			return nil
+		} else {
+			err, usage := claudeHandler(c, resp, promptTokens, textRequest.Model)
+			if err != nil {
+				return err
 			}
-			// Reset response body
-			resp.Body = io.NopCloser(bytes.NewBuffer(responseBody))
+			if usage != nil {
+				textResponse.Usage = *usage
+			}
+			return nil
 		}
-		// We shouldn't set the header before we parse the response body, because the parse part may fail.
-		// And then we will have to send an error response, but in this case, the header has already been set.
-		// So the client will be confused by the response.
-		// For example, Postman will report error, and we cannot check the response at all.
-		for k, v := range resp.Header {
-			c.Writer.Header().Set(k, v[0])
+	case APITypeBaidu:
+		if isStream {
+			err, usage := baiduStreamHandler(c, resp)
+			if err != nil {
+				return err
+			}
+			if usage != nil {
+				textResponse.Usage = *usage
+			}
+			return nil
+		} else {
+			err, usage := baiduHandler(c, resp)
+			if err != nil {
+				return err
+			}
+			if usage != nil {
+				textResponse.Usage = *usage
+			}
+			return nil
 		}
-		c.Writer.WriteHeader(resp.StatusCode)
-		_, err = io.Copy(c.Writer, resp.Body)
-		if err != nil {
-			return errorWrapper(err, "copy_response_body_failed", http.StatusInternalServerError)
+	case APITypePaLM:
+		if textRequest.Stream { // PaLM2 API does not support stream
+			err, responseText := palmStreamHandler(c, resp)
+			if err != nil {
+				return err
+			}
+			streamResponseText = responseText
+			return nil
+		} else {
+			err, usage := palmHandler(c, resp, promptTokens, textRequest.Model)
+			if err != nil {
+				return err
+			}
+			if usage != nil {
+				textResponse.Usage = *usage
+			}
+			return nil
 		}
-		err = resp.Body.Close()
-		if err != nil {
-			return errorWrapper(err, "close_response_body_failed", http.StatusInternalServerError)
+	case APITypeZhipu:
+		if isStream {
+			err, usage := zhipuStreamHandler(c, resp)
+			if err != nil {
+				return err
+			}
+			if usage != nil {
+				textResponse.Usage = *usage
+			}
+			return nil
+		} else {
+			err, usage := zhipuHandler(c, resp)
+			if err != nil {
+				return err
+			}
+			if usage != nil {
+				textResponse.Usage = *usage
+			}
+			return nil
 		}
-		return nil
+	default:
+		return errorWrapper(errors.New("unknown api type"), "unknown_api_type", http.StatusInternalServerError)
 	}
 }

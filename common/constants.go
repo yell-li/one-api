@@ -68,6 +68,7 @@ var AutomaticDisableChannelEnabled = false
 var QuotaRemindThreshold = 1000
 var PreConsumedQuota = 500
 var ApproximateTokenEnabled = false
+var RetryTimes = 0
 
 var RootUserEmail = ""
 
@@ -75,6 +76,8 @@ var IsMasterNode = os.Getenv("NODE_TYPE") != "slave"
 
 var requestInterval, _ = strconv.Atoi(os.Getenv("POLLING_INTERVAL"))
 var RequestInterval = time.Duration(requestInterval) * time.Second
+
+var SyncFrequency = 10 * 60 // unit is second, will be overwritten by SYNC_FREQUENCY
 
 const (
 	RoleGuestUser  = 0
@@ -150,6 +153,9 @@ const (
 	ChannelTypePaLM      = 11
 	ChannelTypeAPI2GPT   = 12
 	ChannelTypeAIGC2D    = 13
+	ChannelTypeAnthropic = 14
+	ChannelTypeBaidu     = 15
+	ChannelTypeZhipu     = 16
 )
 
 var ChannelBaseURLs = []string{
@@ -167,4 +173,7 @@ var ChannelBaseURLs = []string{
 	"",                              // 11
 	"https://api.api2gpt.com",       // 12
 	"https://api.aigc2d.com",        // 13
+	"https://api.anthropic.com",     // 14
+	"https://aip.baidubce.com",      // 15
+	"https://open.bigmodel.cn",      // 16
 }
