@@ -1,0 +1,7 @@
+build_images:
+  only:
+    - master
+  tags:
+    - dev-runner-3.99
+  script:
+    - build-docker-image-docker
