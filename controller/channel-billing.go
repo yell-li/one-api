@@ -77,6 +77,63 @@ type APGC2DGPTUsageResponse struct {
 	TotalUsed      float64 `json:"total_used"`
 }
 
+type OpenApiLoginResponse struct {
+	Object string `json:"object"`
+	User   struct {
+		Object  string        `json:"object"`
+		Id      string        `json:"id"`
+		Email   string        `json:"email"`
+		Name    string        `json:"name"`
+		Picture string        `json:"picture"`
+		Created int           `json:"created"`
+		Groups  []interface{} `json:"groups"`
+		Session struct {
+			SensitiveId string      `json:"sensitive_id"`
+			Object      string      `json:"object"`
+			Name        interface{} `json:"name"`
+			Created     int         `json:"created"`
+			LastUse     int         `json:"last_use"`
+			Publishable bool        `json:"publishable"`
+		} `json:"session"`
+		Orgs struct {
+			Object string `json:"object"`
+			Data   []struct {
+				Object      string        `json:"object"`
+				Id          string        `json:"id"`
+				Created     int           `json:"created"`
+				Title       string        `json:"title"`
+				Name        string        `json:"name"`
+				Description string        `json:"description"`
+				Personal    bool          `json:"personal"`
+				IsDefault   bool          `json:"is_default"`
+				Role        string        `json:"role"`
+				Groups      []interface{} `json:"groups"`
+			} `json:"data"`
+		} `json:"orgs"`
+		IntercomHash string        `json:"intercom_hash"`
+		Amr          []interface{} `json:"amr"`
+	} `json:"user"`
+	Invites []interface{} `json:"invites"`
+}
+
+type OpenApiCreditSummary struct {
+	Object         string  `json:"object"`
+	TotalGranted   float64 `json:"total_granted"`
+	TotalUsed      float64 `json:"total_used"`
+	TotalAvailable float64 `json:"total_available"`
+	Grants         struct {
+		Object string `json:"object"`
+		Data   []struct {
+			Object      string  `json:"object"`
+			Id          string  `json:"id"`
+			GrantAmount float64 `json:"grant_amount"`
+			UsedAmount  float64 `json:"used_amount"`
+			EffectiveAt float64 `json:"effective_at"`
+			ExpiresAt   float64 `json:"expires_at"`
+		} `json:"data"`
+	} `json:"grants"`
+}
+
 // GetAuthHeader get auth header
 func GetAuthHeader(token string) http.Header {
 	h := http.Header{}
@@ -124,6 +181,35 @@ func updateChannelCloseAIBalance(channel *model.Channel) (float64, error) {
 	}
 	channel.UpdateBalance(response.TotalAvailable)
 	return response.TotalAvailable, nil
+}
+
+func updateChannelOpenAIBalance(channel *model.Channel) (float64, error) {
+	login := "https://api.openai.com/dashboard/onboarding/login"
+	body, err := GetResponseBody("POST", login, channel, GetAuthHeader(channel.Key))
+	if err != nil {
+		return 0, err
+	}
+	var loginResponse OpenApiLoginResponse
+	err = json.Unmarshal(body, &loginResponse)
+	if err != nil {
+		return 0, err
+	}
+	if loginResponse.User.Session.SensitiveId == "" {
+		return 0, errors.New("获取 Session id 失败")
+	}
+	url := "https://api.openai.com/dashboard/billing/credit_grants"
+	resp, err := GetResponseBody("GET", url, channel, GetAuthHeader(channel.Key))
+	if err != nil {
+		return 0, err
+	}
+	var credit OpenApiCreditSummary
+	err = json.Unmarshal(resp, &resp)
+	if err != nil {
+		return 0, err
+	}
+
+	channel.UpdateBalance(credit.TotalAvailable)
+	return credit.TotalAvailable, nil
 }
 
 func updateChannelOpenAISBBalance(channel *model.Channel) (float64, error) {
@@ -206,9 +292,7 @@ func updateChannelBalance(channel *model.Channel) (float64, error) {
 	}
 	switch channel.Type {
 	case common.ChannelTypeOpenAI:
-		if channel.BaseURL != "" {
-			baseURL = channel.BaseURL
-		}
+		return updateChannelOpenAIBalance(channel)
 	case common.ChannelTypeAzure:
 		return 0, errors.New("尚未实现")
 	case common.ChannelTypeCustom:
