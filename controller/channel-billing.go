@@ -198,7 +198,7 @@ func updateChannelOpenAIBalance(channel *model.Channel) (float64, error) {
 		return 0, errors.New("获取 Session id 失败")
 	}
 	url := "https://api.openai.com/dashboard/billing/credit_grants"
-	resp, err := GetResponseBody("GET", url, channel, GetAuthHeader(channel.Key))
+	resp, err := GetResponseBody("GET", url, channel, GetAuthHeader(loginResponse.User.Session.SensitiveId))
 	if err != nil {
 		return 0, err
 	}
