@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const LayoutFull = "2006-01-02 15:04:05"
+
 var StartTime = time.Now().Unix() // unit: second
 var Version = "v0.4.8"            // this hard coding will be replaced automatically when building, no need to manually change
 var SystemName = "统一账号池"

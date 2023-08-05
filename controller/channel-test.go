@@ -133,6 +133,7 @@ func disableChannel(channelId int, channelName string, reason string) {
 	model.UpdateChannelStatusById(channelId, common.ChannelStatusDisabled)
 	subject := fmt.Sprintf("通道「%s」（#%d）已被禁用", channelName, channelId)
 	content := fmt.Sprintf("通道「%s」（#%d）已被禁用，原因：%s", channelName, channelId, reason)
+	common.DingTalkGeneralMessage(content)
 	err := common.SendEmail(subject, common.RootUserEmail, content)
 	if err != nil {
 		common.SysError(fmt.Sprintf("failed to send email: %s", err.Error()))
@@ -182,7 +183,9 @@ func testAllChannels(notify bool) error {
 		testAllChannelsRunning = false
 		testAllChannelsLock.Unlock()
 		if notify {
-			err := common.SendEmail("通道测试完成", common.RootUserEmail, "通道测试完成，如果没有收到禁用通知，说明所有通道都正常")
+			content := "通道测试完成，如果没有收到禁用通知，说明所有通道都正常"
+			common.DingTalkGeneralMessage(content)
+			err := common.SendEmail("通道测试完成", common.RootUserEmail, content)
 			if err != nil {
 				common.SysError(fmt.Sprintf("failed to send email: %s", err.Error()))
 			}

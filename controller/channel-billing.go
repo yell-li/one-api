@@ -292,6 +292,7 @@ func updateChannelBalance(channel *model.Channel) (float64, error) {
 	}
 	switch channel.Type {
 	case common.ChannelTypeOpenAI:
+		return 0, errors.New("尚未实现")
 		return updateChannelOpenAIBalance(channel)
 	case common.ChannelTypeAzure:
 		return 0, errors.New("尚未实现")

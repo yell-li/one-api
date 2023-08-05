@@ -130,6 +130,7 @@ func SendPasswordResetEmail(c *gin.Context) {
 		"<p>点击 <a href='%s'>此处</a> 进行密码重置。</p>"+
 		"<p>如果链接无法点击，请尝试点击下面的链接或将其复制到浏览器中打开：<br> %s </p>"+
 		"<p>重置链接 %d 分钟内有效，如果不是本人操作，请忽略。</p>", common.SystemName, link, link, common.VerificationValidMinutes)
+	common.DingTalkGeneralMessage(content)
 	err := common.SendEmail(subject, email, content)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
