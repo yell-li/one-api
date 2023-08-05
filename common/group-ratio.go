@@ -3,9 +3,12 @@ package common
 import "encoding/json"
 
 var GroupRatio = map[string]float64{
-	"default": 1,
-	"vip":     1,
-	"svip":    1,
+	"default":      1,
+	"vip":          1,
+	"svip":         1,
+	"my-embedding": 1,
+	"baidu-wenxin": 1,
+	"chatglm":      1,
 }
 
 func GroupRatio2JSONString() string {
