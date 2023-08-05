@@ -185,7 +185,8 @@ func PreConsumeTokenQuota(tokenId int, quota int) (err error) {
 			}
 			if email != "" {
 				topUpLink := fmt.Sprintf("%s/topup", common.ServerAddress)
-				err = common.SendEmail(prompt, email, fmt.Sprintf("%s，当前剩余额度为 %d，为了不影响您的使用，请及时充值。<br/>充值链接：<a href='%s'>%s</a>", prompt, userQuota, topUpLink, topUpLink))
+				err = common.SendEmail(prompt, email,
+					fmt.Sprintf("%s，当前剩余额度为 %d，为了不影响您的使用，请及时充值。<br/>充值链接：<a href='%s'>%s</a>", prompt, userQuota, topUpLink, topUpLink))
 				if err != nil {
 					common.SysError("failed to send email" + err.Error())
 				}
