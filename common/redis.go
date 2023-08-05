@@ -61,3 +61,21 @@ func RedisDel(key string) error {
 	ctx := context.Background()
 	return RDB.Del(ctx, key).Err()
 }
+
+// 检查请求是否重复(防止暴力点击)
+func CheckRepeatRequest(key string, expire time.Duration) bool {
+	// 缓存的key
+	cacheKey := "repeat_request:" + key
+
+	if expire.Seconds() < 1 {
+		RDB.Del(context.Background(), cacheKey)
+		return false
+	}
+
+	if RDB.Incr(context.Background(), cacheKey).Val() == 1 {
+		RDB.Expire(context.Background(), cacheKey, expire)
+		return false
+	}
+
+	return true //重复请求
+}

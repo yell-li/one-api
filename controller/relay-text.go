@@ -10,6 +10,7 @@ import (
 	"one-api/common"
 	"one-api/model"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -31,6 +32,9 @@ func init() {
 func relayTextHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
 	channelType := c.GetInt("channel")
 	tokenId := c.GetInt("token_id")
+	if !common.CheckRepeatRequest(fmt.Sprintf("relay_text_helper_%d", tokenId), 1*time.Second) {
+		return errorWrapper(errors.New("request too frequently"), "request too frequently", http.StatusBadRequest)
+	}
 	userId := c.GetInt("id")
 	consumeQuota := c.GetBool("consume_quota")
 	group := c.GetString("group")
