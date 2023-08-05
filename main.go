@@ -46,7 +46,7 @@ func main() {
 
 	// Initialize options
 	model.InitOptionMap()
-	if common.RedisEnabled {
+	if !common.RedisEnabled {
 		model.InitChannelCache()
 	}
 	if os.Getenv("SYNC_FREQUENCY") != "" {
@@ -56,7 +56,7 @@ func main() {
 		}
 		common.SyncFrequency = frequency
 		go model.SyncOptions(frequency)
-		if common.RedisEnabled {
+		if !common.RedisEnabled {
 			go model.SyncChannelCache(frequency)
 		}
 	}
@@ -90,7 +90,7 @@ func main() {
 	if port == "" {
 		port = strconv.Itoa(*common.Port)
 	}
-	err = server.Run(":" + port)
+	err = server.Run("127.0.0.1:" + port)
 	if err != nil {
 		common.FatalLog("failed to start HTTP server: " + err.Error())
 	}

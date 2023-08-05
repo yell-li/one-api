@@ -1,32 +1,49 @@
 package model
 
 import (
+	"context"
+	"fmt"
 	"one-api/common"
 	"strings"
+	"sync"
+	"time"
 )
 
 type Ability struct {
-	Group     string `json:"group" gorm:"type:varchar(32);primaryKey;autoIncrement:false"`
-	Model     string `json:"model" gorm:"primaryKey;autoIncrement:false"`
-	ChannelId int    `json:"channel_id" gorm:"primaryKey;autoIncrement:false;index"`
-	Enabled   bool   `json:"enabled"`
+	Id           uint64 `json:"id"`
+	Group        string `json:"group" gorm:"type:varchar(32);"`
+	Model        string `json:"model" gorm:"type:varchar(200);"`
+	ChannelId    int    `json:"channel_id" gorm:"index"`
+	Enabled      bool   `json:"enabled"`
+	SelectedTime int64  `json:"selected_time" gorm:"default:0"`
 }
 
-func GetRandomSatisfiedChannel(group string, model string) (*Channel, error) {
-	ability := Ability{}
-	var err error = nil
-	if common.UsingSQLite {
-		err = DB.Where("`group` = ? and model = ? and enabled = 1", group, model).Order("RANDOM()").Limit(1).First(&ability).Error
-	} else {
-		err = DB.Where("`group` = ? and model = ? and enabled = 1", group, model).Order("RAND()").Limit(1).First(&ability).Error
+var randomSatisfiedSyncLock sync.RWMutex
+
+func GetRandomSatisfiedChannel(group string, model string) (channel *Channel, err error) {
+	var ability Ability
+	channel = &Channel{}
+
+	randomSatisfiedSyncLock.Lock() //加锁
+	cacheKey := fmt.Sprintf("get_random_satisfied_ability_%s_%s", group, model)
+	cacheAbilityId, _ := common.RDB.Get(context.Background(), cacheKey).Uint64()
+
+	query := DB.Where("`group` = ? and model = ? and enabled = 1", group, model)
+	if cacheAbilityId > 0 {
+		query = query.Where("id != ?", cacheAbilityId)
 	}
-	if err != nil {
-		return nil, err
+	err = query.Order("selected_time ASC").Limit(1).First(&ability).Error
+	if ability.ChannelId <= 0 {
+		randomSatisfiedSyncLock.Unlock() //解锁
+		return
 	}
-	channel := Channel{}
+	common.RDB.Set(context.Background(), cacheKey, ability.Id, 1*time.Minute)
+	_ = DB.Model(Ability{}).Where("id = ?", ability.Id).Updates(map[string]interface{}{"selected_time": time.Now().UnixMilli()}).Error
+	randomSatisfiedSyncLock.Unlock() //解锁
+
 	channel.Id = ability.ChannelId
 	err = DB.First(&channel, "id = ?", ability.ChannelId).Error
-	return &channel, err
+	return
 }
 
 func (channel *Channel) AddAbilities() error {
