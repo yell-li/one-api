@@ -24,7 +24,7 @@ FROM reg.xthklocal.cn/xthk-library/alpine:3.18.2
 
 ENV XTHK_CODE_ROOT=/var/www/code/app
 
-COPY --from=builder2 /build/one-api /var/www/code/app
+COPY --from=builder2 /build/one-api /var/www/code/app/
 
 EXPOSE 3000
 WORKDIR /var/www/code/app
