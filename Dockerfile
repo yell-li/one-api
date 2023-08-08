@@ -20,12 +20,15 @@ RUN go env -w GOPROXY=https://goproxy.cn,direct \
    && go mod download
 RUN go build -ldflags "-s -w -X 'one-api/common.Version=$(cat VERSION)' -extldflags '-static'" -o one-api
 
-FROM reg.xthklocal.cn/xthk-library/alpine:3.18.2
+FROM alpine
 
-ENV XTHK_CODE_ROOT=/var/www/code/app
-ENV CONFIG_SWITCH_DIR=/var/www/code/config
-COPY --from=builder2 /build/one-api /var/www/code/app/
+RUN apk update \
+    && apk upgrade \
+    && apk add --no-cache ca-certificates tzdata \
+    && update-ca-certificates 2>/dev/null || true
 
+COPY --from=builder2 /build/one-api /
+COPY ./.env /
 EXPOSE 3000
-WORKDIR /var/www/code/app
-CMD ["./one-api"]
+WORKDIR /
+ENTRYPOINT ["/one-api"]
