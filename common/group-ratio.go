@@ -8,6 +8,8 @@ var GroupRatio = map[string]float64{
 	"svip":         1,
 	"my-embedding": 1,
 	"baidu-wenxin": 1,
+	"xunfei-spark": 1,
+	"ali-tongyi":   1,
 	"chatglm":      1,
 }
 
