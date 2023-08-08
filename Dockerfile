@@ -23,7 +23,7 @@ RUN go build -ldflags "-s -w -X 'one-api/common.Version=$(cat VERSION)' -extldfl
 FROM reg.xthklocal.cn/xthk-library/alpine:3.18.2
 
 ENV XTHK_CODE_ROOT=/var/www/code/app
-
+ENV CONFIG_SWITCH_DIR=/var/www/code/config
 COPY --from=builder2 /build/one-api /var/www/code/app/
 
 EXPOSE 3000
