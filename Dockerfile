@@ -28,4 +28,4 @@ COPY --from=builder2 /build/one-api /var/www/code/app/
 
 EXPOSE 3000
 WORKDIR /var/www/code/app
-CMD ["./one-api","-c","--log-dir /home/logs/app"]
+CMD ["./one-api"]
