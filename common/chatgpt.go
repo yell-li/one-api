@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	url2 "net/url"
+	"os"
 	"time"
 )
 
@@ -28,7 +29,11 @@ func (c *ChatGptService) GetCredit(email, password string) (credit OpenApiCredit
 		err = errors.New("获取accessToken失败")
 		return
 	}
-	login := "https://api.openai.com/dashboard/onboarding/login"
+	proxy := os.Getenv("OPENAI_PROXY")
+	if proxy == "" {
+		proxy = "https://api.openai.com"
+	}
+	login := proxy + "/dashboard/onboarding/login"
 	resp, err := resty.New().R().SetHeaders(map[string]string{"Authorization": fmt.Sprintf("Bearer %s", accessToken)}).Post(login)
 	if err != nil {
 		return
@@ -42,7 +47,7 @@ func (c *ChatGptService) GetCredit(email, password string) (credit OpenApiCredit
 		err = errors.New("获取 Session id 失败")
 		return
 	}
-	url := "https://api.openai.com/dashboard/billing/credit_grants"
+	url := proxy + "/dashboard/billing/credit_grants"
 	resp, err = resty.New().R().SetHeaders(map[string]string{"Authorization": fmt.Sprintf("Bearer %s", loginResponse.User.Session.SensitiveId)}).Get(url)
 	if err != nil {
 		return
