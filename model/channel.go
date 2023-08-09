@@ -7,6 +7,7 @@ import (
 
 type Channel struct {
 	Id                 int     `json:"id"`
+	AccountId          uint64  `json:"account_id" gorm:"default:0"`
 	Type               int     `json:"type" gorm:"default:0"`
 	Key                string  `json:"key" gorm:"not null;index"`
 	Status             int     `json:"status" gorm:"default:1"`
