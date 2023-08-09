@@ -181,9 +181,10 @@ func NewCacheGetRandomSatisfiedChannel(group string, model string) (*Channel, er
 	if !common.RedisEnabled {
 		return GetRandomSatisfiedChannel(group, model)
 	}
-	fmt.Println("-----------------")
 	channelIds := common.RDB.ZRange(context.Background(), getChannelGroupModelCacheKey(group, model), 0, 0).Val()
-	fmt.Println("-----------", channelIds)
+	if len(channelIds) <= 0 {
+		return nil, errors.New("channel not inited")
+	}
 	common.RDB.ZAddXX(context.Background(), getChannelGroupModelCacheKey(group, model), &redis.Z{
 		Score:  float64(time.Now().UnixMilli()),
 		Member: channelIds[0],
