@@ -66,7 +66,7 @@ func (c *ChatGptService) GetCacheAccessToken(email string, password string) stri
 	return auth.AccessToken
 }
 
-// 获取AccessToken
+// 获取AccessToken，Python实现获取token相关代码：https://github.com/pengzhile/pandora/blob/v1.3.0/src/pandora/openai/auth.py
 func (c *ChatGptService) GetAuthToken(email string, password string) (auth AuthData, err error) {
 	//1，初始化基础数据
 	c.initAuth(email, password)
