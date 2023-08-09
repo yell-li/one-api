@@ -15,5 +15,5 @@ build_docker_image:
   tags:
     - dev-runner-3.99
   script:
-    - build-docker-image-docker PROJECT_NAME
+    - build-docker-image-docker
 
