@@ -6,14 +6,17 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-resty/resty/v2"
+	"io"
 	"net/http"
-	"net/http/cookiejar"
 	url2 "net/url"
 	"os"
+	"strings"
 	"time"
 )
 
 type ChatGptService struct {
+	authHost      string
+	proxyURL      string
 	email         string
 	password      string
 	userAgent     string
@@ -29,11 +32,11 @@ func (c *ChatGptService) GetCredit(email, password string) (credit OpenApiCredit
 		err = errors.New("获取accessToken失败")
 		return
 	}
-	proxy := os.Getenv("OPENAI_PROXY")
-	if proxy == "" {
-		proxy = "https://api.openai.com"
+	c.proxyURL = os.Getenv("OPENAI_PROXY")
+	if c.proxyURL == "" {
+		c.proxyURL = "https://api.openai.com"
 	}
-	login := proxy + "/dashboard/onboarding/login"
+	login := c.proxyURL + "/dashboard/onboarding/login"
 	resp, err := resty.New().R().SetHeaders(map[string]string{"Authorization": fmt.Sprintf("Bearer %s", accessToken)}).Post(login)
 	if err != nil {
 		return
@@ -47,7 +50,8 @@ func (c *ChatGptService) GetCredit(email, password string) (credit OpenApiCredit
 		err = errors.New("获取 Session id 失败")
 		return
 	}
-	url := proxy + "/dashboard/billing/credit_grants"
+
+	url := c.proxyURL + "/dashboard/billing/credit_grants"
 	resp, err = resty.New().R().SetHeaders(map[string]string{"Authorization": fmt.Sprintf("Bearer %s", loginResponse.User.Session.SensitiveId)}).Get(url)
 	if err != nil {
 		return
@@ -105,6 +109,12 @@ func (c *ChatGptService) GetAuthToken(email string, password string) (auth AuthD
 }
 
 func (c *ChatGptService) initAuth(email string, password string) {
+	c.authHost = "https://auth0.openai.com"
+
+	c.proxyURL = os.Getenv("OPENAI_PROXY")
+	if c.proxyURL == "" {
+		c.proxyURL = c.authHost
+	}
 	c.email = email
 	c.password = password
 	c.userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
@@ -129,14 +139,13 @@ func (c *ChatGptService) getPreLoginCookieAndState() (cookies []*http.Cookie, st
 		return
 	}
 
-	url := "https://auth0.openai.com/authorize?client_id=" + c.clientId + "&audience=https%3A%2F%2Fapi.openai.com%2Fv1&redirect_uri=com.openai.chat%3A%2F%2Fauth0.openai.com%2Fios%2Fcom.openai.chat%2Fcallback&scope=openid%20email%20profile%20offline_access%20model.request%20model.read%20organization.read%20offline&response_type=code&preauth_cookie=" + preAuthCookie.PreAuthCookie + "&code_challenge=" + c.codeChallenge + "&code_challenge_method=S256&prompt=login"
+	url := c.proxyURL + "/authorize?client_id=" + c.clientId + "&audience=https%3A%2F%2Fapi.openai.com%2Fv1&redirect_uri=com.openai.chat%3A%2F%2Fauth0.openai.com%2Fios%2Fcom.openai.chat%2Fcallback&scope=openid%20email%20profile%20offline_access%20model.request%20model.read%20organization.read%20offline&response_type=code&preauth_cookie=" + preAuthCookie.PreAuthCookie + "&code_challenge=" + c.codeChallenge + "&code_challenge_method=S256&prompt=login"
 
-	jar, _ := cookiejar.New(&cookiejar.Options{})
 	client := http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
-		Jar:     jar,
+		Jar:     nil,
 		Timeout: 30 * time.Second,
 	}
 
@@ -169,49 +178,79 @@ func (c *ChatGptService) getPreLoginCookieAndState() (cookies []*http.Cookie, st
 }
 
 func (c *ChatGptService) sendPreLoginData(state string, cookies []*http.Cookie) (err error) {
-	url := "https://auth0.openai.com/u/login/identifier?state=" + state
-	data := map[string]string{
-		"state":                       state,
-		"username":                    "670809380@qq.com",
-		"js-available":                "true",
-		"webauthn-available":          "true",
-		"is-brave":                    "false",
-		"webauthn-platform-available": "false",
-		"action":                      "default",
+	path := "/u/login/identifier?state=" + state
+	data := url2.Values{
+		"state":                       []string{state},
+		"username":                    []string{c.email},
+		"js-available":                []string{"true"},
+		"webauthn-available":          []string{"true"},
+		"is-brave":                    []string{"false"},
+		"webauthn-platform-available": []string{"false"},
+		"action":                      []string{"default"},
 	}
-
-	resp, err := resty.New().R().SetHeaders(map[string]string{
-		"content-type": "application/x-www-form-urlencoded",
-		"User-Agent":   c.userAgent,
-		"Referer":      url,
-		"Origin":       "https://auth0.openai.com",
-	}).SetCookies(cookies).SetFormData(data).Post(url)
-	if err != nil {
-		return
-	}
-	if resp.StatusCode() == 302 || resp.StatusCode() == 200 {
-		return
-	}
-	return errors.New(fmt.Sprintf("发送预登录数据失败：StatusCode#%d", resp.StatusCode()))
-}
-
-func (c *ChatGptService) sendLoginData(state string, cookies []*http.Cookie) (location, referer string, err error) {
-	url := "https://auth0.openai.com/u/login/password?state=" + state
-	referer = url
-
 	client := http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
-		Jar:     newCustomCookieJar(cookies),
+		Jar:     nil,
 		Timeout: 30 * time.Second,
 	}
-	resp, err := client.PostForm(url, url2.Values{
+	req := &http.Request{
+		Method: http.MethodPost,
+		Header: http.Header{
+			"content-type": []string{"application/x-www-form-urlencoded"},
+			"User-Agent":   []string{c.userAgent},
+			"Referer":      []string{c.authHost + path},
+			"Origin":       []string{c.authHost},
+		},
+		Body: io.NopCloser(strings.NewReader(data.Encode())),
+	}
+	for _, cookie := range cookies {
+		req.AddCookie(cookie)
+	}
+	req.URL, _ = url2.Parse(c.proxyURL + path)
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	if resp.StatusCode == 302 || resp.StatusCode == 200 {
+		return
+	}
+	return errors.New(fmt.Sprintf("发送预登录数据失败：StatusCode#%d", resp.StatusCode))
+}
+
+func (c *ChatGptService) sendLoginData(state string, cookies []*http.Cookie) (location, referer string, err error) {
+	path := "/u/login/password?state=" + state
+	url := c.proxyURL + path
+
+	data := url2.Values{
 		"state":    []string{state},
 		"username": []string{c.email},
 		"password": []string{c.password},
 		"action":   []string{"default"},
-	})
+	}
+	client := http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+		Jar:     nil,
+		Timeout: 30 * time.Second,
+	}
+	req := &http.Request{
+		Method: http.MethodPost,
+		Header: http.Header{
+			"Content-Type": []string{"application/x-www-form-urlencoded"},
+			"User-Agent":   []string{c.userAgent},
+			"Referer":      []string{c.authHost + path},
+			"Origin":       []string{c.authHost},
+		},
+		Body: io.NopCloser(strings.NewReader(data.Encode())),
+	}
+	for _, cookie := range cookies {
+		req.AddCookie(cookie)
+	}
+	req.URL, _ = url2.Parse(url)
+	resp, err := client.Do(req)
 	if err != nil {
 		return
 	}
@@ -224,28 +263,28 @@ func (c *ChatGptService) sendLoginData(state string, cookies []*http.Cookie) (lo
 }
 
 func (c *ChatGptService) getAuthCode(location, referer string, cookies []*http.Cookie) (authCode string, err error) {
-	url := "https://auth0.openai.com" + location
-	jar, _ := cookiejar.New(&cookiejar.Options{})
+	url := c.proxyURL + location
+
 	client := http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
-		Jar:     jar,
+		Jar:     nil,
 		Timeout: 30 * time.Second,
 	}
 
-	res := &http.Request{
+	req := &http.Request{
 		Header: http.Header{
 			"User-Agent": []string{c.userAgent},
 			"Referer":    []string{referer},
-			"Origin":     []string{"https://auth0.openai.com"},
+			"Origin":     []string{c.authHost},
 		},
 	}
 	for _, cookie := range cookies {
-		res.AddCookie(cookie)
+		req.AddCookie(cookie)
 	}
-	res.URL, _ = url2.Parse(url)
-	resp, err := client.Do(res)
+	req.URL, _ = url2.Parse(url)
+	resp, err := client.Do(req)
 	if err != nil {
 		return
 	}
@@ -266,27 +305,45 @@ func (c *ChatGptService) getAuthCode(location, referer string, cookies []*http.C
 }
 
 func (c *ChatGptService) getAuthData(authCode string, cookies []*http.Cookie) (auth AuthData, err error) {
-	url := "https://auth0.openai.com/oauth/token"
-	headers := map[string]string{
-		"User-Agent": c.userAgent,
+	url := c.proxyURL + "/oauth/token"
+	data := url2.Values{
+		"redirect_uri":  []string{"com.openai.chat://auth0.openai.com/ios/com.openai.chat/callback"},
+		"grant_type":    []string{"authorization_code"},
+		"client_id":     []string{c.clientId},
+		"code":          []string{authCode},
+		"code_verifier": []string{c.codeVerifier},
 	}
 
-	data := map[string]string{
-		"redirect_uri":  "com.openai.chat://auth0.openai.com/ios/com.openai.chat/callback",
-		"grant_type":    "authorization_code",
-		"client_id":     c.clientId,
-		"code":          authCode,
-		"code_verifier": c.codeVerifier,
+	client := http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+		Jar:     nil,
+		Timeout: 30 * time.Second,
 	}
-	resp, err := resty.New().R().SetHeaders(headers).SetCookies(cookies).SetFormData(data).Post(url)
+	req := &http.Request{
+		Method: http.MethodPost,
+		Header: http.Header{
+			"User-Agent":   []string{c.userAgent},
+			"Content-Type": []string{"application/x-www-form-urlencoded"},
+		},
+		Body: io.NopCloser(strings.NewReader(data.Encode())),
+	}
+	for _, cookie := range cookies {
+		req.AddCookie(cookie)
+	}
+	req.URL, _ = url2.Parse(url)
+	resp, err := client.Do(req)
 	if err != nil {
 		return
 	}
-	if resp.StatusCode() != 200 {
-		err = errors.New(fmt.Sprintf("get auth data error, and response code is %d", resp.StatusCode()))
+
+	if resp.StatusCode != 200 {
+		err = errors.New(fmt.Sprintf("get auth data error, and response code is %d", resp.StatusCode))
 		return
 	}
-	err = json.Unmarshal(resp.Body(), &auth)
+	byt, _ := io.ReadAll(resp.Body)
+	err = json.Unmarshal(byt, &auth)
 	return
 }
 
@@ -301,23 +358,6 @@ type AuthData struct {
 
 type AuthCookie struct {
 	PreAuthCookie string `json:"preauth_cookie"`
-}
-
-// 自定义的 CookieJar，将指定的 Cookie 添加进去
-func newCustomCookieJar(cookie []*http.Cookie) http.CookieJar {
-	return &customCookieJar{cookies: cookie}
-}
-
-type customCookieJar struct {
-	cookies []*http.Cookie
-}
-
-func (j *customCookieJar) SetCookies(u *url2.URL, cookies []*http.Cookie) {
-	j.cookies = append(j.cookies, cookies...)
-}
-
-func (j *customCookieJar) Cookies(u *url2.URL) []*http.Cookie {
-	return j.cookies
 }
 
 type OpenApiLoginResponse struct {
