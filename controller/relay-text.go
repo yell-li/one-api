@@ -53,8 +53,9 @@ func init() {
 func relayTextHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
 	channelType := c.GetInt("channel")
 	tokenId := c.GetInt("token_id")
-	if common.CheckRepeatTimes(fmt.Sprintf("relay_text_helper_%d", tokenId), c.GetInt64("second_limit"), 1*time.Second) {
-		return errorWrapper(errors.New("request too frequently"), "request too frequently", http.StatusBadRequest)
+	secondLimit := c.GetInt64("second_limit")
+	if common.CheckRepeatTimes(fmt.Sprintf("relay_text_helper_%d", tokenId), secondLimit, 1*time.Second) {
+		return errorWrapper(errors.New(fmt.Sprintf("request too frequently,text second limited %d", secondLimit)), "request too frequently", http.StatusBadRequest)
 	}
 	userId := c.GetInt("id")
 	consumeQuota := c.GetBool("consume_quota")

@@ -18,8 +18,9 @@ func relayImageHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode 
 	imageModel := "dall-e"
 
 	tokenId := c.GetInt("token_id")
-	if common.CheckRepeatTimes(fmt.Sprintf("relay_image_helper_%d", tokenId), c.GetInt64("second_limit"), 1*time.Second) {
-		return errorWrapper(errors.New("request too frequently"), "request too frequently", http.StatusBadRequest)
+	secondLimit := c.GetInt64("second_limit")
+	if common.CheckRepeatTimes(fmt.Sprintf("relay_image_helper_%d", tokenId), secondLimit, 1*time.Second) {
+		return errorWrapper(errors.New(fmt.Sprintf("request too frequently,image second limited %d", secondLimit)), "request too frequently", http.StatusBadRequest)
 	}
 	channelType := c.GetInt("channel")
 	userId := c.GetInt("id")
