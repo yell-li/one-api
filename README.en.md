@@ -190,7 +190,7 @@ If you encounter a blank page after deployment, refer to [#97](https://github.co
 > Zeabur's servers are located overseas, automatically solving network issues, and the free quota is sufficient for personal usage.
 
 1. First, fork the code.
-2. Go to [Zeabur](https://zeabur.com/), log in, and enter the console.
+2. Go to [Zeabur](https://zeabur.com?referralCode=songquanpeng), log in, and enter the console.
 3. Create a new project. In Service -> Add Service, select Marketplace, and choose MySQL. Note down the connection parameters (username, password, address, and port).
 4. Copy the connection parameters and run ```create database `one-api` ``` to create the database.
 5. Then, in Service -> Add Service, select Git (authorization is required for the first use) and choose your forked repository.
@@ -283,7 +283,7 @@ If the channel ID is not provided, load balancing will be used to distribute the
     + Double-check that your interface address and API Key are correct.
 
 ## Related Projects
-[FastGPT](https://github.com/c121914yu/FastGPT): Build an AI knowledge base in three minutes
+[FastGPT](https://github.com/labring/FastGPT): Knowledge question answering system based on the LLM
 
 ## Note
 This project is an open-source project. Please use it in compliance with OpenAI's [Terms of Use](https://openai.com/policies/terms-of-use) and **applicable laws and regulations**. It must not be used for illegal purposes.

@@ -1,10 +1,11 @@
 FROM node:16 as builder
 
 WORKDIR /build
+COPY web/package.json .
+RUN npm install
 COPY ./web .
 COPY ./VERSION .
-RUN npm install
-RUN REACT_APP_VERSION=$(cat VERSION) npm run build
+RUN DISABLE_ESLINT_PLUGIN='true' REACT_APP_VERSION=$(cat VERSION) npm run build
 
 FROM golang AS builder2
 
