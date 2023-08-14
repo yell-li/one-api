@@ -71,7 +71,12 @@ func (c *ChatGptService) GetCacheAccessToken(email string, password string) stri
 	if err != nil {
 		DingTalkGeneralMessage(fmt.Sprintf("获取ChatGpttoken信息失败,acount:%s, error:%s", email, err.Error()))
 	}
-	RDB.Set(context.Background(), cacheKey, auth.AccessToken, 1*time.Hour)
+
+	expire := 2 * time.Hour
+	if differ := auth.ExpiresIn - time.Now().Unix() - 7200; differ > 0 {
+		expire = time.Duration(differ) * time.Second
+	}
+	RDB.Set(context.Background(), cacheKey, auth.AccessToken, expire)
 	return auth.AccessToken
 }
 
@@ -352,7 +357,7 @@ type AuthData struct {
 	RefreshToken string `json:"refresh_token"`
 	IdToken      string `json:"id_token"`
 	Scope        string `json:"scope"`
-	ExpiresIn    int    `json:"expires_in"`
+	ExpiresIn    int64  `json:"expires_in"`
 	TokenType    string `json:"token_type"`
 }
 
