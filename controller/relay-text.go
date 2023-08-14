@@ -8,8 +8,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
+	"net/url"
 	"one-api/common"
 	"one-api/model"
+	"os"
 	"strings"
 	"time"
 )
@@ -31,6 +33,20 @@ func init() {
 	httpClient = &http.Client{}
 	impatientHTTPClient = &http.Client{
 		Timeout: 5 * time.Second,
+	}
+	// 增加代理配置
+	httpProxyStr := os.Getenv("HTTP_PROXY")
+	if httpProxyStr != "" {
+		proxyUrl, _err := url.Parse(httpProxyStr)
+		if _err != nil {
+			panic(_err)
+		}
+		httpClient.Transport = &http.Transport{
+			Proxy: http.ProxyURL(proxyUrl),
+		}
+		impatientHTTPClient.Transport = &http.Transport{
+			Proxy: http.ProxyURL(proxyUrl),
+		}
 	}
 }
 
@@ -309,6 +325,14 @@ func relayTextHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
 		err = c.Request.Body.Close()
 		if err != nil {
 			return errorWrapper(err, "close_request_body_failed", http.StatusInternalServerError)
+		}
+		if resp.StatusCode != http.StatusOK {
+			responseBody, _err := io.ReadAll(resp.Body)
+			if _err != nil {
+				return errorWrapper(_err, "http_code_none_200_read_failed", resp.StatusCode)
+			}
+			responseBodyStr := strings.ReplaceAll(string(responseBody), "\n", "")
+			return errorWrapper(errors.New(responseBodyStr), "http_code_none_200", resp.StatusCode)
 		}
 		isStream = isStream || strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream")
 	}
