@@ -63,16 +63,16 @@ func RedisDel(key string) error {
 }
 
 // 检查请求是否重复(防止暴力点击)
-func CheckRepeatRequest(key string, expire time.Duration) bool {
+func CheckRepeatTimes(key string, times int64, expire time.Duration) bool {
 	// 缓存的key
-	cacheKey := "repeat_request:" + key
+	cacheKey := "repeat_times:" + key
 
 	if expire.Seconds() < 1 {
 		RDB.Del(context.Background(), cacheKey)
 		return false
 	}
 
-	if RDB.Incr(context.Background(), cacheKey).Val() == 1 {
+	if RDB.Incr(context.Background(), cacheKey).Val() <= times {
 		RDB.Expire(context.Background(), cacheKey, expire)
 		return false
 	}

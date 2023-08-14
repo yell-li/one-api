@@ -19,6 +19,7 @@ type Token struct {
 	RemainQuota    int    `json:"remain_quota" gorm:"default:0"`
 	UnlimitedQuota bool   `json:"unlimited_quota" gorm:"default:false"`
 	UsedQuota      int    `json:"used_quota" gorm:"default:0"` // used quota
+	SecondLimit    int64  `json:"second_limit" gorm:"default:50"`
 }
 
 func GetAllUserTokens(userId int, startIdx int, num int) ([]*Token, error) {
