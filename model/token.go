@@ -40,6 +40,9 @@ func ValidateUserToken(key string) (token *Token, err error) {
 	}
 	token, err = CacheGetTokenByKey(key)
 	if err == nil {
+		if token.SecondLimit <= 0 {
+			token.SecondLimit = 50
+		}
 		if token.Status != common.TokenStatusEnabled {
 			return nil, errors.New("该令牌状态不可用")
 		}
