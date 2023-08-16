@@ -1,9 +1,11 @@
 package model
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/go-redis/redis/v8"
 	"math/rand"
 	"one-api/common"
 	"strconv"
@@ -172,4 +174,66 @@ func CacheGetRandomSatisfiedChannel(group string, model string) (*Channel, error
 	}
 	idx := rand.Intn(len(channels))
 	return channels[idx], nil
+}
+
+func NewCacheGetRandomSatisfiedChannel(group string, model string) (*Channel, error) {
+	channel := &Channel{}
+	if !common.RedisEnabled {
+		return GetRandomSatisfiedChannel(group, model)
+	}
+	channelIds := common.RDB.ZRange(context.Background(), getChannelGroupModelCacheKey(group, model), 0, 0).Val()
+	if len(channelIds) <= 0 {
+		return nil, errors.New("channel not inited")
+	}
+	common.RDB.ZAddXX(context.Background(), getChannelGroupModelCacheKey(group, model), &redis.Z{
+		Score:  float64(time.Now().UnixMilli()),
+		Member: channelIds[0],
+	})
+	cache := common.RDB.HGet(context.Background(), getChannelCacheKey(), channelIds[0]).Val()
+	err := json.Unmarshal([]byte(cache), channel)
+	return channel, err
+}
+
+func SyncChannelRDBCache(frequency int) {
+	for {
+		time.Sleep(time.Duration(frequency) * time.Second)
+		common.SysLog("syncing channels from database")
+		InitChannelRDBCache()
+	}
+}
+
+func InitChannelRDBCache() {
+	var channels []*Channel
+	DB.Find(&channels)
+	if len(channels) <= 0 {
+		return
+	}
+
+	for _, channel := range channels {
+		byt, _ := json.Marshal(channel)
+		common.RDB.HSet(context.Background(), getChannelCacheKey(), channel.Id, string(byt))
+
+		groups := strings.Split(channel.Group, ",")
+		models := strings.Split(channel.Models, ",")
+		for _, group := range groups {
+			for _, model := range models {
+				if channel.Status == common.ChannelStatusEnabled {
+					common.RDB.ZAddNX(context.Background(), getChannelGroupModelCacheKey(group, model), &redis.Z{
+						Score:  float64(time.Now().UnixMilli()),
+						Member: channel.Id,
+					})
+				} else {
+					common.RDB.ZRem(context.Background(), getChannelGroupModelCacheKey(group, model), channel.Id)
+				}
+			}
+		}
+	}
+}
+
+func getChannelCacheKey() string {
+	return "all_channel_cache_data"
+}
+
+func getChannelGroupModelCacheKey(group string, model string) string {
+	return fmt.Sprintf("channel_group_model_%s_%s", group, model)
 }

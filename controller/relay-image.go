@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"one-api/common"
 	"one-api/model"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -17,6 +18,10 @@ func relayImageHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode 
 	imageModel := "dall-e"
 
 	tokenId := c.GetInt("token_id")
+	secondLimit := c.GetInt64("second_limit")
+	if common.CheckRepeatTimes(fmt.Sprintf("relay_image_helper_%d", tokenId), secondLimit, 1*time.Second) {
+		return errorWrapper(errors.New(fmt.Sprintf("request too frequently,image second limited %d", secondLimit)), "request too frequently", http.StatusBadRequest)
+	}
 	channelType := c.GetInt("channel")
 	userId := c.GetInt("id")
 	consumeQuota := c.GetBool("consume_quota")

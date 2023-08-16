@@ -50,7 +50,8 @@ func main() {
 	// Initialize options
 	model.InitOptionMap()
 	if common.RedisEnabled {
-		model.InitChannelCache()
+		//model.InitChannelCache()
+		model.InitChannelRDBCache()
 	}
 	if os.Getenv("SYNC_FREQUENCY") != "" {
 		frequency, err := strconv.Atoi(os.Getenv("SYNC_FREQUENCY"))
@@ -60,7 +61,8 @@ func main() {
 		common.SyncFrequency = frequency
 		go model.SyncOptions(frequency)
 		if common.RedisEnabled {
-			go model.SyncChannelCache(frequency)
+			//go model.SyncChannelCache(frequency)
+			go model.SyncChannelRDBCache(frequency)
 		}
 	}
 	if os.Getenv("CHANNEL_UPDATE_FREQUENCY") != "" {

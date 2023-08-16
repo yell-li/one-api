@@ -19,6 +19,7 @@ type Token struct {
 	RemainQuota    int    `json:"remain_quota" gorm:"default:0"`
 	UnlimitedQuota bool   `json:"unlimited_quota" gorm:"default:false"`
 	UsedQuota      int    `json:"used_quota" gorm:"default:0"` // used quota
+	SecondLimit    int64  `json:"second_limit" gorm:"default:50"`
 }
 
 func GetAllUserTokens(userId int, startIdx int, num int) ([]*Token, error) {
@@ -39,6 +40,9 @@ func ValidateUserToken(key string) (token *Token, err error) {
 	}
 	token, err = CacheGetTokenByKey(key)
 	if err == nil {
+		if token.SecondLimit <= 0 {
+			token.SecondLimit = 50
+		}
 		if token.Status != common.TokenStatusEnabled {
 			return nil, errors.New("该令牌状态不可用")
 		}
@@ -190,6 +194,9 @@ func PreConsumeTokenQuota(tokenId int, quota int) (err error) {
 				if err != nil {
 					common.SysError("failed to send email" + err.Error())
 				}
+			} else {
+				content := fmt.Sprintf("%s，当前剩余额度为 %d，为了不影响您的使用，请及时充值。", prompt, userQuota)
+				common.DingTalkGeneralMessage(content)
 			}
 		}()
 	}

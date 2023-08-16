@@ -206,9 +206,18 @@ func updateChannelBalance(channel *model.Channel) (float64, error) {
 	}
 	switch channel.Type {
 	case common.ChannelTypeOpenAI:
-		if channel.BaseURL != "" {
-			baseURL = channel.BaseURL
+		//获取账户数据
+		account := model.GetAccount(channel.Id)
+		if account.ID <= 0 {
+			return 0, errors.New(fmt.Sprintf("请先配置CHAT-GPT账户:%d", channel.Id))
 		}
+		//获取账户余额
+		credit, err := new(common.ChatGptService).GetCredit(account.Account, account.Password)
+		if err != nil {
+			return 0, err
+		}
+		channel.UpdateBalance(credit.TotalAvailable)
+		return credit.TotalAvailable, nil
 	case common.ChannelTypeAzure:
 		return 0, errors.New("尚未实现")
 	case common.ChannelTypeCustom:
