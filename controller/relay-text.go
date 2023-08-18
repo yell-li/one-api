@@ -335,8 +335,7 @@ func relayTextHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
 			if _err != nil {
 				return errorWrapper(_err, "http_code_none_200_read_failed", resp.StatusCode)
 			}
-			responseBodyStr := strings.ReplaceAll(string(responseBody), "\n", "")
-			return errorWrapper(errors.New(responseBodyStr), "http_code_none_200", resp.StatusCode)
+			return errorWrapper(errors.New(string(responseBody)), fmt.Sprintf("http_code_none_200_%s", resp.Status), resp.StatusCode)
 		}
 		isStream = isStream || strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream")
 	}
