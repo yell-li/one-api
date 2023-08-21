@@ -62,6 +62,11 @@ func RedisDel(key string) error {
 	return RDB.Del(ctx, key).Err()
 }
 
+func RedisDecrease(key string, value int64) error {
+	ctx := context.Background()
+	return RDB.DecrBy(ctx, key, value).Err()
+}
+
 // 检查请求是否重复(防止暴力点击)
 func CheckRepeatTimes(key string, times int64, expire time.Duration) bool {
 	// 缓存的key
