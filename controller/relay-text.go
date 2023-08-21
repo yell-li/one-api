@@ -214,7 +214,11 @@ func relayTextHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
 	if err != nil {
 		return errorWrapper(err, "get_user_quota_failed", http.StatusInternalServerError)
 	}
-	if userQuota > 10*preConsumedQuota {
+	err = model.CacheDecreaseUserQuota(userId, preConsumedQuota)
+	if err != nil {
+		return errorWrapper(err, "decrease_user_quota_failed", http.StatusInternalServerError)
+	}
+	if userQuota > 100*preConsumedQuota {
 		// in this case, we do not pre-consume quota
 		// because the user has enough quota
 		preConsumedQuota = 0
@@ -335,10 +339,14 @@ func relayTextHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
 			if _err != nil {
 				return errorWrapper(_err, "http_code_none_200_read_failed", resp.StatusCode)
 			}
-			responseBodyStr := strings.ReplaceAll(string(responseBody), "\n", "")
-			return errorWrapper(errors.New(responseBodyStr), "http_code_none_200", resp.StatusCode)
+			return errorWrapper(errors.New(string(responseBody)), fmt.Sprintf("http_code_none_200_%s", resp.Status), resp.StatusCode)
 		}
 		isStream = isStream || strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream")
+
+		if resp.StatusCode != http.StatusOK {
+			return errorWrapper(
+				fmt.Errorf("bad status code: %d", resp.StatusCode), "bad_status_code", resp.StatusCode)
+		}
 	}
 
 	var textResponse TextResponse
@@ -350,14 +358,7 @@ func relayTextHelper(c *gin.Context, relayMode int) *OpenAIErrorWithStatusCode {
 		go func() {
 			if consumeQuota {
 				quota := 0
-				completionRatio := 1.0
-				if strings.HasPrefix(textRequest.Model, "gpt-3.5") {
-					completionRatio = 1.333333
-				}
-				if strings.HasPrefix(textRequest.Model, "gpt-4") {
-					completionRatio = 2
-				}
-
+				completionRatio := common.GetCompletionRatio(textRequest.Model)
 				promptTokens = textResponse.Usage.PromptTokens
 				completionTokens = textResponse.Usage.CompletionTokens
 
