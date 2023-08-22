@@ -73,7 +73,7 @@ func (c *ChatGptService) GetCacheAccessToken(email string, password string) stri
 	}
 
 	expire := 2 * time.Hour
-	if differ := auth.ExpiresIn - time.Now().Unix() - 7200; differ > 0 {
+	if differ := auth.ExpiresIn - 7200; differ > 0 {
 		expire = time.Duration(differ) * time.Second
 	}
 	RDB.Set(context.Background(), cacheKey, auth.AccessToken, expire)
