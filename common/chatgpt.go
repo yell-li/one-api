@@ -72,8 +72,8 @@ func (c *ChatGptService) GetCacheAccessToken(email string, password string) stri
 		DingTalkGeneralMessage(fmt.Sprintf("获取ChatGpttoken信息失败,acount:%s, error:%s", email, err.Error()))
 	}
 
-	expire := 2 * time.Hour
-	if differ := auth.ExpiresIn - 7200; differ > 0 {
+	expire := 48 * time.Hour
+	if differ := auth.ExpiresIn - 7200; auth.ExpiresIn < time.Now().Unix() && differ > 0 {
 		expire = time.Duration(differ) * time.Second
 	}
 	RDB.Set(context.Background(), cacheKey, auth.AccessToken, expire)
