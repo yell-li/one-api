@@ -77,8 +77,10 @@ func CheckRepeatTimes(key string, times int64, expire time.Duration) bool {
 		return false
 	}
 
-	if RDB.Incr(context.Background(), cacheKey).Val() <= times {
-		RDB.Expire(context.Background(), cacheKey, expire)
+	if val := RDB.Incr(context.Background(), cacheKey).Val(); val <= times {
+		if val == 1 {
+			RDB.Expire(context.Background(), cacheKey, expire)
+		}
 		return false
 	}
 
