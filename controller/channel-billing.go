@@ -212,12 +212,12 @@ func updateChannelBalance(channel *model.Channel) (float64, error) {
 			return 0, errors.New(fmt.Sprintf("请先配置CHAT-GPT账户:%d", channel.Id))
 		}
 		//获取账户余额
-		credit, err := new(common.ChatGptService).GetCredit(account.Account, account.Password)
+		totalAvailable, err := new(common.ChatGptService).GetCredit(account.Account, account.Password)
 		if err != nil {
 			return 0, err
 		}
-		channel.UpdateBalance(credit.TotalAvailable)
-		return credit.TotalAvailable, nil
+		channel.UpdateBalance(totalAvailable)
+		return totalAvailable, nil
 	case common.ChannelTypeAzure:
 		return 0, errors.New("尚未实现")
 	case common.ChannelTypeCustom:
