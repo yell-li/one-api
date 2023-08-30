@@ -26,7 +26,7 @@ type ChatGptService struct {
 }
 
 // 获取账户余额信息
-func (c *ChatGptService) GetCredit(email, password string) (credit OpenApiCreditSummary, err error) {
+func (c *ChatGptService) GetCredit(email, password string) (totalAvailable float64, err error) {
 	accessToken := c.GetCacheAccessToken(email, password)
 	if accessToken == "" {
 		err = errors.New("获取accessToken失败")
@@ -52,12 +52,58 @@ func (c *ChatGptService) GetCredit(email, password string) (credit OpenApiCredit
 	}
 
 	url := c.proxyURL + "/dashboard/billing/credit_grants"
+	var credit OpenApiCreditSummary
 	resp, err = resty.New().R().SetHeaders(map[string]string{"Authorization": fmt.Sprintf("Bearer %s", loginResponse.User.Session.SensitiveId)}).Get(url)
 	if err != nil {
 		return
 	}
 	err = json.Unmarshal(resp.Body(), &credit)
+	if err != nil {
+		return
+	}
+	totalAvailable = credit.TotalAvailable
+
+	subscription, err := c.GetSubscription(loginResponse.User.Session.SensitiveId)
+	if subscription.SystemHardLimitUsd-credit.TotalGranted < 1 {
+		return
+	}
+	usage, err := c.GetUsage(loginResponse.User.Session.SensitiveId)
+	if err != nil {
+		return
+	}
+
+	totalAvailable = subscription.SystemHardLimitUsd - usage.TotalUsage
 	return
+}
+
+func (c *ChatGptService) GetSubscription(sensitiveId string) (response SubscriptionResponse, err error) {
+	url := c.proxyURL + "/dashboard/billing/subscription"
+	resp, err := resty.New().R().SetHeaders(map[string]string{"Authorization": fmt.Sprintf("Bearer %s", sensitiveId)}).Get(url)
+	if err != nil {
+		return
+	}
+	err = json.Unmarshal(resp.Body(), &response)
+	return
+}
+
+func (c *ChatGptService) GetUsage(sensitiveId string) (response UsageResponse, err error) {
+	url := c.proxyURL + fmt.Sprintf("/dashboard/billing/usage?end_date=%s&start_date=%s", CurrentMonth().AddDate(0, 1, 0).Format("2006-01-02"), CurrentMonth().Format("2006-01-02"))
+	resp, err := resty.New().R().SetHeaders(map[string]string{"Authorization": fmt.Sprintf("Bearer %s", sensitiveId)}).Get(url)
+	if err != nil {
+		return
+	}
+	err = json.Unmarshal(resp.Body(), &response)
+	if response.TotalUsage > 0 {
+		response.TotalUsage = response.TotalUsage / 100
+	}
+	return
+}
+
+func CurrentMonth() time.Time {
+	loc, _ := time.LoadLocation("Local")
+	theTime, _ := time.ParseInLocation("2006-01", time.Now().Format("2006-01"), loc) //使用模板在对应时区转化为time.time类型
+	return theTime
+
 }
 
 // 获取缓存ChatGPT token
@@ -420,4 +466,16 @@ type OpenApiCreditSummary struct {
 			ExpiresAt   float64 `json:"expires_at"`
 		} `json:"data"`
 	} `json:"grants"`
+}
+
+type SubscriptionResponse struct {
+	Object             string  `json:"object"`
+	SoftLimitUsd       float64 `json:"soft_limit_usd"`
+	HardLimitUsd       float64 `json:"hard_limit_usd"`
+	SystemHardLimitUsd float64 `json:"system_hard_limit_usd"`
+}
+
+type UsageResponse struct {
+	Object     string  `json:"object"`
+	TotalUsage float64 `json:"total_usage"`
 }
