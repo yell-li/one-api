@@ -243,6 +243,7 @@ func InitChannelRDBCache() {
 
 	for _, channel := range channels {
 		byt, _ := json.Marshal(channel)
+		common.RDB.HSet(context.Background(), getTempChannelCacheKey(), channel.Id, string(byt))
 		common.RDB.HSet(context.Background(), getChannelCacheKey(), channel.Id, string(byt))
 
 		groups := strings.Split(channel.Group, ",")
@@ -260,10 +261,15 @@ func InitChannelRDBCache() {
 			}
 		}
 	}
+	common.RDB.Rename(context.Background(), getTempChannelCacheKey(), getChannelCacheKey())
 }
 
 func getChannelCacheKey() string {
 	return "all_channel_cache_data"
+}
+
+func getTempChannelCacheKey() string {
+	return "all_temp_channel_cache_data"
 }
 
 func getChannelGroupModelCacheKey(group string, model string) string {
