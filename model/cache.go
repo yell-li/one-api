@@ -198,7 +198,31 @@ func NewCacheGetRandomSatisfiedChannel(group string, model string) (*Channel, er
 		Member: channelIds[0],
 	})
 	cache := common.RDB.HGet(context.Background(), getChannelCacheKey(), channelIds[0]).Val()
+	if cache == "" {
+		return nil, errors.New("no cache channel")
+	}
 	err := json.Unmarshal([]byte(cache), channel)
+	if err != nil {
+		return nil, err
+	}
+
+	groups := strings.Split(channel.Group, ",")
+	models := strings.Split(channel.Models, ",")
+	var isContainGroup, isContainModel bool
+	for _, val := range groups {
+		if val == group {
+			isContainGroup = true
+		}
+	}
+	for _, val := range models {
+		if val == model {
+			isContainModel = true
+		}
+	}
+	if !isContainGroup || !isContainModel {
+		common.RDB.ZRem(context.Background(), getChannelGroupModelCacheKey(group, model), channel.Id)
+		return NewCacheGetRandomSatisfiedChannel(group, model)
+	}
 	return channel, err
 }
 
