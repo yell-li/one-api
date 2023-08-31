@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"one-api/model"
 
 	"github.com/gin-gonic/gin"
 )
@@ -389,4 +390,16 @@ func RetrieveModel(c *gin.Context) {
 			"error": openAIError,
 		})
 	}
+}
+
+func AvailableModel(c *gin.Context) {
+	userId := c.GetInt("id")
+	userGroup, _ := model.CacheGetUserGroup(userId)
+	models, _ := model.GetModelByGroup(userGroup)
+	c.JSON(200, gin.H{
+		"data":        models,
+		"status_code": 200,
+		"message":     "success",
+	})
+
 }

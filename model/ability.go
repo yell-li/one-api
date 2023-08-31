@@ -29,6 +29,26 @@ func GetRandomSatisfiedChannel(group string, model string) (*Channel, error) {
 	return &channel, err
 }
 
+func GetModelByGroup(group string) (resp []string, err error) {
+	var abilities []Ability
+	if common.UsingSQLite {
+		err = DB.Where("`group` = ? and enabled = 1", group).Distinct("model").Find(&abilities).Error
+	} else {
+		err = DB.Where("`group` = ? and enabled = 1", group).Distinct("model").Find(&abilities).Error
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(abilities) <= 0 {
+		return
+	}
+	for _, a := range abilities {
+		resp = append(resp, a.Model)
+	}
+
+	return
+}
+
 func (channel *Channel) AddAbilities() error {
 	models_ := strings.Split(channel.Models, ",")
 	groups_ := strings.Split(channel.Group, ",")
