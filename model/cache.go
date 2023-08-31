@@ -219,7 +219,7 @@ func NewCacheGetRandomSatisfiedChannel(group string, model string) (*Channel, er
 			isContainModel = true
 		}
 	}
-	if !isContainGroup || !isContainModel {
+	if !isContainGroup || !isContainModel || channel.Status != common.ChannelStatusEnabled {
 		common.RDB.ZRem(context.Background(), getChannelGroupModelCacheKey(group, model), channel.Id)
 		return NewCacheGetRandomSatisfiedChannel(group, model)
 	}
