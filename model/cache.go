@@ -198,7 +198,33 @@ func NewCacheGetRandomSatisfiedChannel(group string, model string) (*Channel, er
 		Member: channelIds[0],
 	})
 	cache := common.RDB.HGet(context.Background(), getChannelCacheKey(), channelIds[0]).Val()
+	if cache == "" {
+		common.RDB.ZRem(context.Background(), getChannelGroupModelCacheKey(group, model), channelIds[0])
+		return NewCacheGetRandomSatisfiedChannel(group, model)
+	}
 	err := json.Unmarshal([]byte(cache), channel)
+	if err != nil {
+		common.RDB.ZRem(context.Background(), getChannelGroupModelCacheKey(group, model), channelIds[0])
+		return NewCacheGetRandomSatisfiedChannel(group, model)
+	}
+
+	groups := strings.Split(channel.Group, ",")
+	models := strings.Split(channel.Models, ",")
+	var isContainGroup, isContainModel bool
+	for _, val := range groups {
+		if val == group {
+			isContainGroup = true
+		}
+	}
+	for _, val := range models {
+		if val == model {
+			isContainModel = true
+		}
+	}
+	if !isContainGroup || !isContainModel || channel.Status != common.ChannelStatusEnabled {
+		common.RDB.ZRem(context.Background(), getChannelGroupModelCacheKey(group, model), channel.Id)
+		return NewCacheGetRandomSatisfiedChannel(group, model)
+	}
 	return channel, err
 }
 
@@ -219,6 +245,7 @@ func InitChannelRDBCache() {
 
 	for _, channel := range channels {
 		byt, _ := json.Marshal(channel)
+		common.RDB.HSet(context.Background(), getTempChannelCacheKey(), channel.Id, string(byt))
 		common.RDB.HSet(context.Background(), getChannelCacheKey(), channel.Id, string(byt))
 
 		groups := strings.Split(channel.Group, ",")
@@ -236,10 +263,15 @@ func InitChannelRDBCache() {
 			}
 		}
 	}
+	common.RDB.Rename(context.Background(), getTempChannelCacheKey(), getChannelCacheKey())
 }
 
 func getChannelCacheKey() string {
 	return "all_channel_cache_data"
+}
+
+func getTempChannelCacheKey() string {
+	return "all_temp_channel_cache_data"
 }
 
 func getChannelGroupModelCacheKey(group string, model string) string {

@@ -41,6 +41,14 @@ func (c *ChatGptService) GetCredit(email, password string) (totalAvailable float
 	if err != nil {
 		return
 	}
+	if resp == nil || len(resp.Body()) == 0 {
+		err = errors.New(fmt.Sprintf("请求失败:%s", login))
+		return
+	}
+	if resp.StatusCode() != http.StatusOK {
+		err = errors.New(fmt.Sprintf("request %s status code %d", login, resp.StatusCode()))
+		return
+	}
 	var loginResponse OpenApiLoginResponse
 	err = json.Unmarshal(resp.Body(), &loginResponse)
 	if err != nil {
@@ -57,6 +65,14 @@ func (c *ChatGptService) GetCredit(email, password string) (totalAvailable float
 	if err != nil {
 		return
 	}
+	if resp == nil || len(resp.Body()) == 0 {
+		err = errors.New(fmt.Sprintf("请求失败:%s", url))
+		return
+	}
+	if resp.StatusCode() != http.StatusOK {
+		err = errors.New(fmt.Sprintf("request %s status code %d", url, resp.StatusCode()))
+		return
+	}
 	err = json.Unmarshal(resp.Body(), &credit)
 	if err != nil {
 		return
@@ -64,6 +80,9 @@ func (c *ChatGptService) GetCredit(email, password string) (totalAvailable float
 	totalAvailable = credit.TotalAvailable
 
 	subscription, err := c.GetSubscription(loginResponse.User.Session.SensitiveId)
+	if err != nil {
+		return
+	}
 	if subscription.SystemHardLimitUsd-credit.TotalGranted < 1 {
 		return
 	}
@@ -82,6 +101,14 @@ func (c *ChatGptService) GetSubscription(sensitiveId string) (response Subscript
 	if err != nil {
 		return
 	}
+	if resp == nil || len(resp.Body()) == 0 {
+		err = errors.New(fmt.Sprintf("请求失败:%s", url))
+		return
+	}
+	if resp.StatusCode() != http.StatusOK {
+		err = errors.New(fmt.Sprintf("request %s status code %d", url, resp.StatusCode()))
+		return
+	}
 	err = json.Unmarshal(resp.Body(), &response)
 	return
 }
@@ -90,6 +117,14 @@ func (c *ChatGptService) GetUsage(sensitiveId string) (response UsageResponse, e
 	url := c.proxyURL + fmt.Sprintf("/dashboard/billing/usage?end_date=%s&start_date=%s", CurrentMonth().AddDate(0, 1, 0).Format("2006-01-02"), CurrentMonth().Format("2006-01-02"))
 	resp, err := resty.New().R().SetHeaders(map[string]string{"Authorization": fmt.Sprintf("Bearer %s", sensitiveId)}).Get(url)
 	if err != nil {
+		return
+	}
+	if resp == nil || len(resp.Body()) == 0 {
+		err = errors.New(fmt.Sprintf("请求失败:%s", url))
+		return
+	}
+	if resp.StatusCode() != http.StatusOK {
+		err = errors.New(fmt.Sprintf("request %s status code %d", url, resp.StatusCode()))
 		return
 	}
 	err = json.Unmarshal(resp.Body(), &response)
