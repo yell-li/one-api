@@ -199,10 +199,12 @@ func NewCacheGetRandomSatisfiedChannel(group string, model string) (*Channel, er
 	})
 	cache := common.RDB.HGet(context.Background(), getChannelCacheKey(), channelIds[0]).Val()
 	if cache == "" {
+		common.RDB.ZRem(context.Background(), getChannelGroupModelCacheKey(group, model), channelIds[0])
 		return nil, errors.New("no cache channel")
 	}
 	err := json.Unmarshal([]byte(cache), channel)
 	if err != nil {
+		common.RDB.ZRem(context.Background(), getChannelGroupModelCacheKey(group, model), channelIds[0])
 		return nil, err
 	}
 
