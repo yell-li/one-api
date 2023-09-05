@@ -12,8 +12,8 @@ import (
 
 func SetupGinLog() {
 	if *LogDir != "" {
-		commonLogPath := filepath.Join(*LogDir, "common.log")
-		errorLogPath := filepath.Join(*LogDir, "error.log")
+		commonLogPath := filepath.Join(*LogDir, "file-common.log")
+		errorLogPath := filepath.Join(*LogDir, "file-error.log")
 		commonFd, err := os.OpenFile(commonLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			log.Fatal("failed to open log file")
